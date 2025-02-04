@@ -15,6 +15,8 @@ const server = http.createServer(app);
 
 dotenv.config();
 
+const port = process.env.PORT || 5001;
+
 const openai = new OpenAI({
 	apiKey: process.env.OPENAI_KEY,
 });
@@ -27,7 +29,7 @@ const s3 = new S3Client({
 	region: process.env.BUCKET_REGION,
 });
 
-app.use(cors);
+app.use(cors());
 
 const io = new Server(server, {
 	cors: {
@@ -215,6 +217,7 @@ io.on("connection", (socket) => {
 	});
 });
 
-server.listen(5001, () => {
-	console.log("🟢 Listening on port 5001");
+server.listen(port, '0.0.0.0', () => {
+    console.log(`🟢 Listening on port ${port}`);
 });
+
