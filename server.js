@@ -30,6 +30,12 @@ const s3 = new S3Client({
 });
 
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const videoRoutes = require("./routes/video-routes");
+
+app.use("/api/videos", videoRoutes);
 
 const io = new Server(server, {
 	cors: {
@@ -93,12 +99,12 @@ io.on("connection", (socket) => {
 					Body: file,
 				});
 
-                console.log('uploaded to aws ', {
-					Key,
-					Bucket,
-					ContentType,
-					Body: file,
-				})
+                // console.log('uploaded to aws ', {
+				// 	Key,
+				// 	Bucket,
+				// 	ContentType,
+				// 	Body: file,
+				// })
 
 				const fileStatus = await s3.send(command);
 

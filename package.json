@@ -21,6 +21,7 @@
     "fix-webm-duration": "^1.0.6",
     "hound": "^1.0.5",
     "i": "^0.3.7",
+    "multer": "^1.4.5-lts.1",
     "nodemon": "^3.1.9",
     "npm": "^11.0.0",
     "openai": "^4.80.1",
