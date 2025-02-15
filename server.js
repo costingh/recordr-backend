@@ -49,7 +49,7 @@ io.on("connection", (socket) => {
 	console.log("🟢 Socket is connected");
 
 	socket.on("video-chunks", async (data) => {
-		console.log("🟢 Video chunk is sent");
+		console.log("🟢 Video chunk is sent for ", data.filename);
 		const filePath = path.join("temp_upload", data.filename);
 		const writeStream = fs.createWriteStream(filePath);
 		recordedChunks.push(data.chunks);
@@ -66,24 +66,36 @@ io.on("connection", (socket) => {
 		readStream.pipe(writeStream);
 	});
 
-	socket.on("process-video", async (data) => {
+	socket.on("process-video", async (data, callback) => {
 		try {
 			console.log("🟢 Processing video ", data);
-
 			recordedChunks = [];
 			fs.readFile("temp_upload/" + data.filename, async (err, file) => {
-                console.log('Got video: ', file)
-                if(err) {
-                    console.log('Error reading video file')
-                    console.log(err)
-                    return;
-                }
+				recordedChunks = [];
+				console.log("Got video: ", file);
+				if (err) {
+					console.log("Error reading video file");
+					console.log(err);
+					callback({
+						status: 500,
+						message:
+							"Error reading video file. " +
+							JSON.stringify(error),
+					});
+					return;
+				}
+
 				const processing = await axios.post(
 					`${process.env.NEXT_API_HOST}/recording/${data.userId}/processing`,
 					{ filename: data.filename }
 				);
 
 				if (processing.data.status !== 200) {
+					callback({
+						status: 500,
+						message:
+							"Error, something went wrong while processing file",
+					});
 					return console.log(
 						"Error, something went wrong while processing file"
 					);
@@ -99,27 +111,38 @@ io.on("connection", (socket) => {
 					Body: file,
 				});
 
-                // console.log('uploaded to aws ', {
-				// 	Key,
-				// 	Bucket,
-				// 	ContentType,
-				// 	Body: file,
-				// })
-
 				const fileStatus = await s3.send(command);
-
-				// console.log(fileStatus);
 
 				if (fileStatus?.["$metadata"]?.httpStatusCode === 200) {
 					console.log("🟢 Successfully uploaded video to AWS");
 
-					if (processing.data.plan === "PRO") {
+					if (
+						processing.data.plan === "PRO" ||
+						processing.data.plan === "BUSSINESS"
+					) {
 						fs.stat(
 							"temp_upload/" + data.filename,
 							async (err, stat) => {
+								console.log("a intrat aici");
 								if (!err) {
 									// whisper 25mb
 									if (stat.size < 25000000) {
+										console.log("video is under 25mb");
+										const stopProcessing = await axios.post(
+											`${process.env.NEXT_API_HOST}recording/${data.userId}/complete`,
+											{
+												filename: data.filename,
+											}
+										);
+
+										// if (stopProcessing.status === 200) {
+
+										callback({
+											status: 200,
+											message:
+												"Video processed successfully!",
+										});
+
 										const transcription =
 											await openai.audio.transcriptions.create(
 												{
@@ -163,58 +186,49 @@ io.on("connection", (socket) => {
 															transcription,
 													}
 												);
-
-											if (
-												titleAndSummaryGenerated.data
-													.status !== 200
-											) {
-												console.log(
-													"Error: Something went wrong when creating the title and description"
-												);
-											}
-
-											const stopProcessing =
-												await axios.post(
-													`${process.env.NEXT_API_HOST}recording/${data.userId}/complete`,
-													{
-														filename: data.filename,
-													}
-												);
-
-											if (
-												stopProcessing.data.status !==
-												200
-											) {
-												console.log(
-													"Something went wrong when stopping the process and trying to complete the processing stage"
-												);
-											}
-
-											if (stopProcessing.status === 200) {
-												fs.unlink(
-													"temp_upload/" +
-														data.filename,
-													(err) => {
-														if (!err)
-															console.log(
-																data.filename +
-																	" deleted successfully"
-															);
-													}
-												);
-											}
-										} else {
-											console.log("Error. Upload fails");
 										}
+
+										fs.unlink(
+											"temp_upload/" + data.filename,
+											(err) => {
+												if (!err)
+													console.log(
+														data.filename +
+															" deleted successfully"
+													);
+											}
+										);
+									} else {
+										callback({
+											status: 500,
+											message:
+												"Video exceeds 25mb limit!",
+										});
 									}
+								} else {
+									callback({
+										status: 500,
+										message: "Error processing video.",
+									});
 								}
 							}
 						);
+					} else {
+						callback({
+							status: 200,
+							message: "Please upgrade your plan.",
+						});
 					}
+				} else {
+					callback({
+						status: 500,
+						message: "Error, could not upload to AWS",
+					});
 				}
 			});
 		} catch (error) {
 			console.log("ERROR processing video");
+			callback({ status: "500", message: error });
 		}
 	});
 
@@ -223,7 +237,6 @@ io.on("connection", (socket) => {
 	});
 });
 
-server.listen(port, '0.0.0.0', () => {
-    console.log(`🟢 Listening on port ${port}`);
+server.listen(port, "0.0.0.0", () => {
+	console.log(`🟢 Listening on port ${port}`);
 });
-
